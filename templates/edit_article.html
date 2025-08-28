@@ -1,11 +1,15 @@
-    {% extends "layout.html" %}
-    {% block content %}
-    <h2>Edit Article</h2>
-    <form method="POST" enctype="multipart/form-data">
-      <input type="text" name="title" value="{{ article.title }}" class="form-control mb-2">
-      <textarea name="content" class="form-control mb-2" rows="4">{{ article.content }}</textarea>
-      <input type="file" name="image" class="form-control mb-2">
-      <button type="submit" class="btn btn-primary">Update</button>
-    </form>
-    {% endblock %}
-    
+{% extends "layout.html" %}
+{% block content %}
+<h2>Edit Article</h2>
+<form method="POST" action="{{ url_for('edit_article', article_id=article.id) }}" enctype="multipart/form-data">
+  <input type="text" name="title" value="{{ article.title }}" class="form-control mb-2" required>
+  <textarea name="content" class="form-control mb-2" rows="4" required>{{ article.content }}</textarea>
+  {% if article.image %}
+    <div class="mb-2">
+      <img src="{{ url_for('static', filename='uploads/' ~ article.image) }}" alt="Current Image" style="max-width:200px;">
+    </div>
+  {% endif %}
+  <input type="file" name="image" class="form-control mb-2">
+  <button type="submit" class="btn btn-primary">Update</button>
+</form>
+{% endblock %}

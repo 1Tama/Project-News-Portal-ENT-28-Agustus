@@ -1,9 +1,13 @@
-    {% extends "layout.html" %}
-    {% block content %}
-    <h1>{{ article.title }}</h1>
-    {% if article.image %}
-      <img src="{{ url_for('static', filename='uploads/' ~ article.image) }}" class="img-fluid mb-3" alt="Banner">
-    {% endif %}
-    <div>{{ article.content|safe }}</div>
-    {% endblock %}
-    
+{% extends "layout.html" %}
+{% block content %}
+<h1>{{ article.title }}</h1>
+<small class="text-muted">
+  {{ article.created_at.strftime('%b %d, %Y') }} by {{ article.author.email.split('@')[0] }}
+</small>
+{% if article.image %}
+  <img src="{{ url_for('static', filename='uploads/' ~ article.image) }}" class="img-fluid img mb-3" alt="Banner">
+{% endif %}
+<div class="article-content">
+  {{ article.content|safe }}
+</div>
+{% endblock %}

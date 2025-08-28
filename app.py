@@ -5,14 +5,14 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-import bleach
+import bleach  # For HTML sanitization
+from datetime import datetime
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret-key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///news.db'
 app.config['UPLOAD_FOLDER'] = os.path.join('static', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2MB limit
-
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
@@ -46,6 +46,10 @@ class Article(db.Model):
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
     image = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    author_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # NEW
+
+    author = db.relationship('User', backref='articles')  # NEW
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -53,7 +57,9 @@ def load_user(user_id):
 
 @app.route("/")
 def index():
-    articles = Article.query.all()
+    page = request.args.get('page', 1, type=int)
+    per_page = 6  # Adjust as needed
+    articles = Article.query.order_by(Article.created_at.desc()).paginate(page=page, per_page=per_page)
     return render_template("index.html", articles=articles)
 
 @app.route("/article/<int:article_id>")
@@ -104,38 +110,48 @@ def admin():
         title = request.form["title"]
         content = request.form["content"]
         sanitized_content = bleach.clean(content, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS)
-        file = request.files.get("image")
         filename = None
-        if file and allowed_file(file.filename):
+        file = request.files.get("image")
+        if file and file.filename and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             filename = str(uuid.uuid4()) + "_" + filename
             file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
-        article = Article(title=title, content=sanitized_content, image=filename)
+        article = Article(
+            title=title,
+            content=sanitized_content,
+            image=filename,
+            author_id=current_user.id  # NEW
+        )
         db.session.add(article)
         db.session.commit()
         return redirect(url_for("index"))
     articles = Article.query.all()
-    return render_template("admin.html", articles=articles)
+    users = User.query.all()
+    return render_template("admin.html", articles=articles, users=users)
 
 @app.route("/admin/edit/<int:article_id>", methods=["GET", "POST"])
 @login_required
 def edit_article(article_id):
-    if current_user.role != "admin":
+    article = Article.query.get_or_404(article_id)
+    if current_user.role not in ["admin", "writer"]:
         flash("Access denied")
         return redirect(url_for("index"))
-    article = Article.query.get_or_404(article_id)
+    if current_user.role == "writer" and article.author_id != current_user.id:
+        flash("Writers can only edit their own articles.")
+        return redirect(url_for("admin"))
     if request.method == "POST":
         article.title = request.form["title"]
         content = request.form["content"]
         article.content = bleach.clean(content, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS)
         file = request.files.get("image")
-        if file and allowed_file(file.filename):
+        if file and file.filename and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             filename = str(uuid.uuid4()) + "_" + filename
             file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
             article.image = filename
         db.session.commit()
-        return redirect(url_for("index"))
+        flash("Article updated successfully.")
+        return redirect(url_for("admin"))
     return render_template("edit_article.html", article=article)
 
 @app.route("/admin/delete/<int:article_id>")
@@ -147,6 +163,24 @@ def delete_article(article_id):
     article = Article.query.get_or_404(article_id)
     db.session.delete(article)
     db.session.commit()
+    return redirect(url_for("admin"))
+
+@app.route("/admin/create_user", methods=["POST"])
+@login_required
+def create_user():
+    if current_user.role != "admin":
+        flash("Access denied")
+        return redirect(url_for("index"))
+    email = request.form["email"]
+    password = generate_password_hash(request.form["password"])
+    role = request.form["role"]
+    if User.query.filter_by(email=email).first():
+        flash("User already exists.")
+        return redirect(url_for("admin"))
+    user = User(email=email, password=password, role=role)
+    db.session.add(user)
+    db.session.commit()
+    flash(f"{role.capitalize()} account created.")
     return redirect(url_for("admin"))
 
 # Create default admin on first run
