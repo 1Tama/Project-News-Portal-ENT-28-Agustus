@@ -1,0 +1,9 @@
+    {% extends "layout.html" %}
+    {% block content %}
+    <h1>{{ article.title }}</h1>
+    {% if article.image %}
+      <img src="{{ url_for('static', filename='uploads/' ~ article.image) }}" class="img-fluid mb-3" alt="Banner">
+    {% endif %}
+    <div>{{ article.content|safe }}</div>
+    {% endblock %}
+    
