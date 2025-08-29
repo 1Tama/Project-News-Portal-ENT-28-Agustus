@@ -7,6 +7,11 @@
     {% endif %}
     <div class="card-body px-0">
       <h2 class="card-title">{{ article.title }}</h2>
+      <div class="mb-3">
+        <small class="text-muted">
+          {{ article.created_at.strftime('%b %d, %Y %H:%M') }}
+        </small>
+      </div>
       <div class="article-content">{{ article.content|safe }}</div>
     </div>
   </div>

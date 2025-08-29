@@ -6,6 +6,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import bleach
+from datetime import datetime
 
 # --- Flask app and config ---
 app = Flask(__name__)
@@ -44,6 +45,7 @@ class Article(db.Model):
     title = db.Column(db.String(250), nullable=False)
     content = db.Column(db.Text, nullable=False)
     image = db.Column(db.String(300), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)  # <-- Add this line
 
 # --- User loader for Flask-Login ---
 @login_manager.user_loader
