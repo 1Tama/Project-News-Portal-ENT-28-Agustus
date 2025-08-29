@@ -14,7 +14,7 @@
       <a href="{{ url_for('article_detail', article_id=article.id) }}" class="text-decoration-none text-dark">
         <div class="card h-100 hover-shadow">
           {% if article.image %}
-          <img src="{{ url_for('static', filename='uploads/' ~ article.image) }}" class="article-banner card-img-top" alt="Banner">
+          <img src="{{ url_for('static', filename='uploads/' ~ article.image) }}" class="article-preview-img card-img-top" alt="Banner">
           {% endif %}
           <div class="card-body d-flex flex-column">
             <h5 class="card-title">{{ article.title }}</h5>
