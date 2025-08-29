@@ -1,89 +1,85 @@
-.card-img-top {
-  height: 200px;       /* or whatever height you prefer */
-  object-fit: cover;   /* crop instead of stretching */
-  width: 100%;         /* make sure it fills the card width */
-}
-
-.banner-container {
-  width: 100%;
-  min-height: 80px;
-  max-height: 160x;
-  overflow: hidden;
-  background: #222;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.banner-img {
-  width: 100%;
-  min-height: 180px;
-  object-fit: cover;
-  object-position: center;
-  display: block;
-  max-height: 160px;
-}
-
-@media (max-width: 768px) {
-  .banner-container {
-    min-height: 40px;
-    max-height: 80px;
-  }
-  .banner-img {
-    min-height: 40px;
-    max-height: 80px;
-  }
-}
-
-.main-bg {
-  min-height: 100vh;
-  width: 100%;
-  background: url('/static/article-bg.jpg') center center/cover no-repeat, #f5f5f5;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding-top: 30px;
-  padding-bottom: 30px;
-}
-
-.main-content-container {
-  background: rgba(255,255,255,0.95);
-  border-radius: 8px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.10);
-  padding: 24px 24px;
-  margin: 0 16px;
-  min-width: 80%;
-  max-width: 90%;
-}
-
-@media (max-width: 768px) {
-  .main-content-container {
-    padding: 16px 6vw;
-    max-width: 98vw;
-  }
-  .main-bg {
-    padding-top: 10px;
-    padding-bottom: 10px;
-  }
-}
-
-.article-content p {
-  margin-bottom: 1.2em;
-  line-height: 1.7;
-  font-size: 1.1em;
-}
-
-.article-content h2, .article-content h3 {
-  margin-top: 1.5em;
-  margin-bottom: 0.7em;
-  font-weight: 600;
+body {
+  background: url('/static/background.jpg') center center/cover no-repeat fixed, #f8f9fb;
 }
 
 .article-content img {
-  max-width: 900px;
+  max-width: 100%;
   height: auto;
+}
+
+.navbar-brand {
+  font-size: 1.6rem;
+}
+
+@media (min-width: 768px) {
+  .navbar-brand {
+    font-size: 2rem;
+  }
+}
+
+/* Article reading container _> centered, max width for readability */
+.article-reading-container {
+  max-width: 60rem;
+  width: 100%;
+  margin: 2rem auto;
+  padding: 2rem 1.5rem;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+}
+
+@media (max-width: 600px) {
+  .article-reading-container {
+    padding: 1rem 0.5rem;
+    margin: 1rem 0;
+  }
+}
+
+/* Responsive banner image -> adapts to container width, no fixed height */
+.article-banner {
   display: block;
-  margin: 1em auto;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  margin: 0 auto 1.5rem auto;
+  object-fit: contain;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* custom blue for navbar if you want a specific shade */
+.bg-blue {
+  background-color: #1565c0 !important; /* Example: Material Blue 800 */
+  color: #fff !important;
+}
+
+/* to make content containers slightly opaque for readability */
+main.container {
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  padding: 2rem 2rem;
+}
+
+/* Add extra margin below the main heading */
+main.container h1 {
+  margin-bottom: 2.5rem;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+}
+
+/* add padding to the articles grid for even more space */
+.row.g-4 {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+/* Make the entire card clickable and add a hover effect */
+a.text-decoration-none.text-dark > .card {
+  transition: box-shadow 0.2s, transform 0.2s;
+  cursor: pointer;
+}
+a.text-decoration-none.text-dark > .card:hover {
+  box-shadow: 0 4px 24px rgba(21,101,192,0.12), 0 1.5px 6px rgba(0,0,0,0.04);
+  transform: translateY(-2px) scale(1.01);
+  text-decoration: none;
 }
