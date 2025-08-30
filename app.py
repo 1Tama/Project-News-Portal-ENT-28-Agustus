@@ -18,6 +18,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///news.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join('static','uploads')
 app.config['ALLOWED_EXTENSIONS'] = {'png','jpg','jpeg','gif'}
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2 MB file size limit for uploads
 Path(app.config['UPLOAD_FOLDER']).mkdir(parents=True, exist_ok=True)
 
 # --- Database and Login setup ---
@@ -388,6 +389,14 @@ def writer_article_delete(article_id):
     db.session.commit()
     flash('Article deleted', 'success')
     return redirect(url_for('writer_panel'))
+
+# --- Error handler for file size limit ---
+from flask import abort
+
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    flash('File is too large. Maximum size is 2 MB.', 'danger')
+    return redirect(request.referrer or url_for('index')), 413
 
 # --- Run the app ---
 if __name__ == '__main__':
