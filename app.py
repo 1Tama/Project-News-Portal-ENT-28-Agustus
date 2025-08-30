@@ -7,6 +7,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import bleach
 from datetime import datetime
+from slugify import slugify  # pip install python-slugify
+import pytz
+import markdown
 
 # --- Flask app and config ---
 app = Flask(__name__)
@@ -36,6 +39,7 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='user')
+    name = db.Column(db.String(80), nullable=False, default='User')
     def is_admin(self):
         return self.role == 'admin'
 
@@ -43,14 +47,25 @@ class User(UserMixin, db.Model):
 class Article(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(250), nullable=False)
+    slug = db.Column(db.String(250), unique=True, nullable=False)
     content = db.Column(db.Text, nullable=False)
     image = db.Column(db.String(300), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)  # <-- Add this line
+    author_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    author = db.relationship('User', backref='articles')
 
 # --- User loader for Flask-Login ---
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+# --- Timezone configuration ---
+LOCAL_TZ = pytz.timezone('Asia/Jakarta')
+
+def to_local(dt):
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+    return dt.astimezone(LOCAL_TZ)
 
 # --- Homepage: show all articles or search results ---
 @app.route('/')
@@ -60,13 +75,47 @@ def index():
         articles = Article.query.filter(Article.title.ilike(f'%{q}%')).order_by(Article.id.desc()).all()
     else:
         articles = Article.query.order_by(Article.id.desc()).all()
-    return render_template('index.html', articles=articles)
+
+    # Build role-based numbering
+    admins = User.query.filter_by(role='admin').order_by(User.id).all()
+    writers = User.query.filter_by(role='writer').order_by(User.id).all()
+    admin_map = {u.id: i+1 for i, u in enumerate(admins)}
+    writer_map = {u.id: i+1 for i, u in enumerate(writers)}
+
+    # Set local_created_at for each article
+    for a in articles:
+        a.local_created_at = to_local(a.created_at)
+
+    return render_template(
+        'index.html',
+        articles=articles,
+        admin_map=admin_map,
+        writer_map=writer_map
+    )
 
 # --- Article detail page ---
-@app.route('/article/<int:article_id>')
-def article_detail(article_id):
-    a = Article.query.get_or_404(article_id)
-    return render_template('article.html', article=a)
+@app.route('/<slug>')
+def article_detail(slug):
+    a = Article.query.filter_by(slug=slug).first_or_404()
+    a.local_created_at = to_local(a.created_at)
+
+    # Convert Markdown to HTML and sanitize
+    raw_html = markdown.markdown(a.content, extensions=['extra', 'codehilite'])
+    safe_html = bleach.clean(raw_html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS)
+    a.rendered_content = safe_html
+
+    # Build role-based numbering for publisher display
+    admins = User.query.filter_by(role='admin').order_by(User.id).all()
+    writers = User.query.filter_by(role='writer').order_by(User.id).all()
+    admin_map = {u.id: i+1 for i, u in enumerate(admins)}
+    writer_map = {u.id: i+1 for i, u in enumerate(writers)}
+
+    return render_template(
+        'article.html',
+        article=a,
+        admin_map=admin_map,
+        writer_map=writer_map
+    )
 
 # --- User registration ---
 @app.route('/register', methods=['GET','POST'])
@@ -126,8 +175,8 @@ def admin_required(fn):
 @admin_required
 def admin_dashboard():
     articles = Article.query.order_by(Article.id.desc()).all()
-    admins = User.query.filter(User.role=='admin').all()
-    return render_template('admin_dashboard.html', articles=articles, admins=admins)
+    accounts = User.query.filter(User.role.in_(['admin', 'writer'])).all()
+    return render_template('admin_dashboard.html', articles=articles, accounts=accounts)
 
 # --- Create a new article (admin only) ---
 @app.route('/admin/article/new', methods=['GET','POST'])
@@ -138,6 +187,11 @@ def admin_article_new():
         title = request.form.get('title','').strip()
         content = request.form.get('content','').strip()
         file = request.files.get('image')
+        # --- Duplicate title check (case-insensitive) ---
+        existing = Article.query.filter(db.func.lower(Article.title) == title.lower()).first()
+        if existing:
+            flash('An article with this title already exists. Please use a different title.','danger')
+            return redirect(url_for('admin_article_new'))
         if not title or not content or not file or file.filename=='':
             flash('Title, content, and banner image are required','danger'); return redirect(url_for('admin_article_new'))
         if not allowed_file(file.filename):
@@ -145,7 +199,8 @@ def admin_article_new():
         filename = str(uuid.uuid4()) + '_' + secure_filename(file.filename)
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         safe = bleach.clean(content, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS)
-        art = Article(title=title, content=safe, image=filename)
+        slug = slugify(title)
+        art = Article(title=title, slug=slug, content=safe, image=filename, author_id=current_user.id)
         db.session.add(art); db.session.commit()
         flash('Article created','success'); return redirect(url_for('admin_dashboard'))
     return render_template('admin_article_edit.html', article=None)
@@ -170,6 +225,7 @@ def admin_article_edit(article_id):
             art.image = filename
         art.title = title
         art.content = bleach.clean(content, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS)
+        art.slug = slugify(title)
         db.session.commit()
         flash('Article updated','success'); return redirect(url_for('admin_dashboard'))
     return render_template('admin_article_edit.html', article=art)
@@ -184,30 +240,37 @@ def admin_article_delete(article_id):
     flash('Article deleted','success'); return redirect(url_for('admin_dashboard'))
 
 # --- Create a new admin user (admin only) ---
-@app.route('/admin/admins/new', methods=['POST'])
+@app.route('/admin/account/new', methods=['POST'])
 @login_required
 @admin_required
-def admin_create_admin():
+def admin_create_account():
+    name = request.form.get('name', '').strip()
     email = request.form.get('email','').strip().lower()
     password = request.form.get('password','')
-    if not email or not password:
-        flash('Email and password required','danger'); return redirect(url_for('admin_dashboard'))
+    role = request.form.get('role','user')
+    if not name or not email or not password or role not in ['admin', 'writer']:
+        flash('Name, email, password, and valid role required','danger')
+        return redirect(url_for('admin_dashboard'))
     if User.query.filter_by(email=email).first():
-        flash('User already exists','danger'); return redirect(url_for('admin_dashboard'))
-    u = User(email=email, password=generate_password_hash(password), role='admin')
+        flash('User already exists','danger')
+        return redirect(url_for('admin_dashboard'))
+    u = User(name=name, email=email, password=generate_password_hash(password), role=role)
     db.session.add(u); db.session.commit()
-    flash('Admin account created','success'); return redirect(url_for('admin_dashboard'))
+    flash(f'{role.capitalize()} account created','success')
+    return redirect(url_for('admin_dashboard'))
 
 # --- Delete an admin user (admin only) ---
-@app.route('/admin/admins/delete/<int:user_id>', methods=['POST'])
+@app.route('/admin/account/delete/<int:user_id>', methods=['POST'])
 @login_required
 @admin_required
-def admin_delete_admin(user_id):
+def admin_delete_account(user_id):
     u = User.query.get_or_404(user_id)
     if u.id == current_user.id:
-        flash('You cannot delete yourself','danger'); return redirect(url_for('admin_dashboard'))
+        flash('You cannot delete yourself','danger')
+        return redirect(url_for('admin_dashboard'))
     db.session.delete(u); db.session.commit()
-    flash('Admin deleted','success'); return redirect(url_for('admin_dashboard'))
+    flash('Account deleted','success')
+    return redirect(url_for('admin_dashboard'))
 
 # --- Serve uploaded images ---
 @app.route('/uploads/<path:filename>')
@@ -220,6 +283,111 @@ with app.app_context():
     if not User.query.filter_by(role='admin').first():
         admin = User(email='admin@example.com', password=generate_password_hash('admin123'), role='admin')
         db.session.add(admin); db.session.commit()
+
+# --- Writer panel: manage own articles ---
+@app.route('/writer')
+@login_required
+def writer_panel():
+    if current_user.role != 'writer':
+        flash('Writers only','danger')
+        return redirect(url_for('index'))
+    articles = Article.query.filter_by(author_id=current_user.id).order_by(Article.id.desc()).all()
+    for a in articles:
+        a.local_created_at = to_local(a.created_at)
+    return render_template('writer_dashboard.html', articles=articles)
+
+# --- Writer: Create New Article ---
+@app.route('/writer/article/new', methods=['GET', 'POST'])
+@login_required
+def writer_article_new():
+    if current_user.role != 'writer':
+        flash('Writers only', 'danger')
+        return redirect(url_for('index'))
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip()
+        content = request.form.get('content', '').strip()
+        file = request.files.get('image')
+        if not title or not content or not file or file.filename == '':
+            flash('Title, content, and banner image are required', 'danger')
+            return redirect(url_for('writer_article_new'))
+        if not allowed_file(file.filename):
+            flash('Invalid image type', 'danger')
+            return redirect(url_for('writer_article_new'))
+        slug = slugify(title)
+        # Prevent duplicate slugs for this writer
+        if Article.query.filter_by(slug=slug, author_id=current_user.id).first():
+            flash('You already have an article with a similar title. Please use a different title.', 'danger')
+            return redirect(url_for('writer_article_new'))
+        filename = str(uuid.uuid4()) + '_' + secure_filename(file.filename)
+        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        safe = bleach.clean(content, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS)
+        art = Article(
+            title=title,
+            slug=slug,
+            content=safe,
+            image=filename,
+            author_id=current_user.id,
+            created_at=datetime.utcnow()
+        )
+        db.session.add(art)
+        db.session.commit()
+        flash('Article created', 'success')
+        return redirect(url_for('writer_panel'))
+    return render_template('admin_article_edit.html', article=None)
+
+# --- Writer: Edit Article ---
+@app.route('/writer/article/edit/<int:article_id>', methods=['GET', 'POST'])
+@login_required
+def writer_article_edit(article_id):
+    if current_user.role != 'writer':
+        flash('Writers only', 'danger')
+        return redirect(url_for('index'))
+    art = Article.query.get_or_404(article_id)
+    if art.author_id != current_user.id:
+        flash('You can only edit your own articles', 'danger')
+        return redirect(url_for('writer_panel'))
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip()
+        content = request.form.get('content', '').strip()
+        file = request.files.get('image')
+        if not title or not content:
+            flash('Title and content are required', 'danger')
+            return redirect(url_for('writer_article_edit', article_id=article_id))
+        slug = slugify(title)
+        # Prevent duplicate slugs for this writer (excluding current article)
+        if Article.query.filter(Article.slug == slug, Article.id != article_id, Article.author_id == current_user.id).first():
+            flash('You already have another article with a similar title. Please use a different title.', 'danger')
+            return redirect(url_for('writer_article_edit', article_id=article_id))
+        if file and file.filename != '':
+            if not allowed_file(file.filename):
+                flash('Invalid image type', 'danger')
+                return redirect(url_for('writer_article_edit', article_id=article_id))
+            filename = str(uuid.uuid4()) + '_' + secure_filename(file.filename)
+            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            art.image = filename
+        art.title = title
+        art.slug = slug
+        art.content = bleach.clean(content, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS)
+        db.session.commit()
+        flash('Article updated', 'success')
+        return redirect(url_for('writer_panel'))
+    return render_template('admin_article_edit.html', article=art)
+
+# --- Writer: Delete Article ---
+@app.route('/writer/article/delete/<int:article_id>', methods=['POST'])
+@login_required
+def writer_article_delete(article_id):
+    if current_user.role != 'writer':
+        flash('Writers only', 'danger')
+        return redirect(url_for('index'))
+    art = Article.query.get_or_404(article_id)
+    if art.author_id != current_user.id:
+        flash('You can only delete your own articles', 'danger')
+        return redirect(url_for('writer_panel'))
+    db.session.delete(art)
+    db.session.commit()
+    flash('Article deleted', 'success')
+    return redirect(url_for('writer_panel'))
 
 # --- Run the app ---
 if __name__ == '__main__':

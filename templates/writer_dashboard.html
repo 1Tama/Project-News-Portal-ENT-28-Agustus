@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Writer Panel</h2>
+<a href="{{ url_for('writer_article_new') }}" class="btn btn-success mb-3">New Article</a>
+<table class="table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Title</th>
+      <th>Banner</th>
+      <th>Date</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in articles %}
+    <tr>
+      <td>{{ a.id }}</td>
+      <td>{{ a.title }}</td>
+      <td>
+        {% if a.image %}
+          <img src="{{ url_for('static', filename='uploads/' ~ a.image) }}" class="article-banner" style="max-height:80px">
+        {% else %}
+          -
+        {% endif %}
+      </td>
+      <td>
+        <small class="text-muted">{{ a.local_created_at.strftime('%b %d, %Y %H:%M') }}</small>
+      </td>
+      <td>
+        <a href="{{ url_for('article_detail', slug=a.slug) }}" class="btn btn-sm btn-secondary">View</a>
+        <a href="{{ url_for('writer_article_edit', article_id=a.id) }}" class="btn btn-sm btn-warning">Edit</a>
+        <form method="post" action="{{ url_for('writer_article_delete', article_id=a.id) }}" style="display:inline" onsubmit="return confirm('Delete article?');">
+          <button class="btn btn-sm btn-danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    {% if not articles %}
+    <tr>
+      <td colspan="5"><em>No articles yet.</em></td>
+    </tr>
+    {% endif %}
+  </tbody>
+</table>
+{% endblock %}

@@ -9,10 +9,10 @@
       <h2 class="card-title">{{ article.title }}</h2>
       <div class="mb-3">
         <small class="text-muted">
-          {{ article.created_at.strftime('%b %d, %Y %H:%M') }}
+          {{ article.local_created_at.strftime('%b %d, %Y %H:%M') }} &mdash; {{ article.author.name|e }}
         </small>
       </div>
-      <div class="article-content">{{ article.content|safe }}</div>
+      <div class="article-content">{{ article.rendered_content|safe }}</div>
     </div>
   </div>
 </div>
